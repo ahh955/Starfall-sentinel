@@ -8,22 +8,22 @@ import { collectBurst } from './particles.js';
 import { playPickup } from './audio.js';
 
 export function dropStarlight(pickups, rng, x, y) {
-  pickups.push(makeDrop(x, y));
+  pickups.push(makeDrop(rng, x, y));
   if (rng.next() < PICKUP.bonusChance) {
-    pickups.push(makeDrop(x + rng.range(-18, 18), y + rng.range(-18, 18)));
+    pickups.push(makeDrop(rng, x + rng.range(-18, 18), y + rng.range(-18, 18)));
   }
 }
 
-function makeDrop(x, y) {
+function makeDrop(rng, x, y) {
   return {
     x,
     y,
-    vx: (Math.random() - 0.5) * 40,
-    vy: (Math.random() - 0.5) * 40,
+    vx: (rng.next() - 0.5) * 40,
+    vy: (rng.next() - 0.5) * 40,
     radius: PICKUP.radius,
     life: PICKUP.lifetime,
     // Twinkle phase, so drops shimmer at different rates.
-    phase: Math.random() * Math.PI * 2,
+    phase: rng.next() * Math.PI * 2,
   };
 }
 

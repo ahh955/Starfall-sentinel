@@ -21,6 +21,7 @@ export function startWave(director, wave, rng) {
   director.queue = [];
   const count = WAVES.baseCount + (wave - 1) * WAVES.perWave;
   for (let i = 0; i < count; i += 1) director.queue.push(pickKind(rng, wave));
+  director.total = count;
   // Shuffle the queue so the heavies do not all arrive together.
   for (let i = director.queue.length - 1; i > 0; i -= 1) {
     const j = Math.floor(rng.next() * (i + 1));

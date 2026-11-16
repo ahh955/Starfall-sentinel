@@ -1,4 +1,4 @@
-// Void shards: the five enemy kinds, how they spawn at the arena's edge and
+// Void shards: the six enemy kinds, how they spawn at the arena's edge and
 // how they spiral inward toward the star core. Each kind is a small object
 // with its own shape, speed and temperament.
 
@@ -9,10 +9,12 @@ export const KIND_SHARD = 'shard';
 export const KIND_DART = 'dart';
 export const KIND_TANK = 'tank';
 export const KIND_SPLITTER = 'splitter';
+export const KIND_STINGER = 'stinger';
 export const KIND_MINI = 'mini';
 
 // Each kind's neon colour, shared by the renderer and the explosion particles.
 const KIND_COLORS = {
+  [KIND_STINGER]: '#aaff40',
   [KIND_SHARD]: PALETTE.shard,
   [KIND_DART]: PALETTE.dart,
   [KIND_TANK]: PALETTE.tank,
@@ -25,6 +27,7 @@ export function enemyColor(kind) {
 }
 
 const STATS = {
+  [KIND_STINGER]: { radius: 13, hp: 1, speed: 145, damage: 5, score: 95, spiral: 0 },
   [KIND_SHARD]: SHARD,
   [KIND_DART]: DART,
   [KIND_TANK]: TANK,
@@ -37,6 +40,7 @@ export function kindsForWave(wave) {
   const pool = [
     { kind: KIND_SHARD, weight: 10 },
   ];
+  if (wave >= 3) pool.push({ kind: KIND_STINGER, weight: 4 });
   if (wave >= DART.firstWave) pool.push({ kind: KIND_DART, weight: 4 });
   if (wave >= TANK.firstWave) pool.push({ kind: KIND_TANK, weight: 2 });
   if (wave >= SPLITTER.firstWave) pool.push({ kind: KIND_SPLITTER, weight: 3 });
@@ -77,7 +81,8 @@ export function spawnEnemy(enemies, rng, kind, wave) {
     score: stats.score,
     spiral: stats.spiral * (rng.next() < 0.5 ? 1 : -1),
     // Jagged outline: each shard gets its own random vertices.
-    vertices: shardVertices(rng, stats.radius),
+    vertices: kind === KIND_STINGER ? [{x:22,y:0},{x:-14,y:-13},{x:-5,y:0},{x:-14,y:13}] : shardVertices(rng, stats.radius),
+    age: 0,
     spin: rng.range(-1.4, 1.4),
     rotation: rng.range(0, Math.PI * 2),
     flash: 0,
@@ -103,11 +108,13 @@ export function updateEnemies(enemies, dt) {
     const inward = angleBetween(enemy.x, enemy.y, CORE.x, CORE.y);
     // Tangential direction: perpendicular to the line toward the core.
     const side = inward + Math.PI / 2;
-    const vx = Math.cos(inward) * enemy.speed + Math.cos(side) * enemy.speed * enemy.spiral;
-    const vy = Math.sin(inward) * enemy.speed + Math.sin(side) * enemy.speed * enemy.spiral;
+    enemy.age = (enemy.age || 0) + dt;
+    const zigzag = enemy.kind === KIND_STINGER ? Math.sin(enemy.age * 9) * 1.15 : enemy.spiral;
+    const vx = Math.cos(inward) * enemy.speed + Math.cos(side) * enemy.speed * zigzag;
+    const vy = Math.sin(inward) * enemy.speed + Math.sin(side) * enemy.speed * zigzag;
     enemy.x += vx * dt;
     enemy.y += vy * dt;
-    enemy.rotation += enemy.spin * dt;
+    enemy.rotation = enemy.kind === KIND_STINGER ? inward : enemy.rotation + enemy.spin * dt;
     if (enemy.flash > 0) enemy.flash -= dt;
     const dist = Math.hypot(enemy.x - CORE.x, enemy.y - CORE.y);
     if (dist <= CORE.biteRadius) biters.push(enemy);

@@ -23,9 +23,11 @@ export function createStarfield(rng, count) {
       size: rng.range(0.6, 2.1),
       phase: rng.next() * TAU,
       speed: rng.range(0.6, 2.4),
-      drift: rng.range(2, 9),
+      layer: i % 3,
+      drift: 3 + (i % 3) * 12,
     });
   }
+  stars.nebulae = Array.from({ length: 3 }, (_, i) => ({ x: rng.range(120, 1160), y: rng.range(80, 640), radius: rng.range(350, 540), color: ['42, 88, 190', '125, 40, 170', '15, 140, 155'][i] }));
   return stars;
 }
 
@@ -78,12 +80,32 @@ function button(ctx, game, id, x, y, w, h, label, accent) {
 function drawStarfield(ctx, stars, time) {
   ctx.fillStyle = PALETTE.background;
   ctx.fillRect(0, 0, VIEW.width, VIEW.height);
+  for (const cloud of stars.nebulae) {
+    const g = ctx.createRadialGradient(cloud.x, cloud.y, 0, cloud.x, cloud.y, cloud.radius);
+    g.addColorStop(0, `rgba(${cloud.color}, 0.19)`);
+    g.addColorStop(0.45, `rgba(${cloud.color}, 0.08)`);
+    g.addColorStop(1, `rgba(${cloud.color}, 0)`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, VIEW.width, VIEW.height);
+  }
+  // Faint orbital navigation rings lend depth without competing with combat.
+  ctx.strokeStyle = 'rgba(110, 170, 230, 0.065)';
+  ctx.lineWidth = 1;
+  for (const r of [215, 340, 510]) {
+    ctx.beginPath(); ctx.ellipse(CORE.x, CORE.y, r, r * 0.72, -0.25, 0, TAU); ctx.stroke();
+  }
   for (const star of stars) {
     const twinkle = 0.55 + 0.45 * Math.sin(time * star.speed + star.phase);
     const y = (star.y + time * star.drift) % VIEW.height;
     ctx.globalAlpha = twinkle;
     ctx.fillStyle = PALETTE.star;
-    ctx.fillRect(star.x, y, star.size, star.size);
+    const x = (star.x + time * (star.layer + 1) * 2) % VIEW.width;
+    ctx.fillRect(x, y, star.size, star.size);
+    if (star.layer === 2 && star.size > 1.7) {
+      ctx.globalAlpha *= 0.3;
+      ctx.fillRect(x - 3, y + 0.5, 7, 0.7);
+      ctx.fillRect(x + 0.5, y - 3, 0.7, 7);
+    }
   }
   ctx.globalAlpha = 1;
 }
@@ -130,6 +152,16 @@ function drawCore(ctx, game, time) {
   ctx.beginPath();
   ctx.arc(CORE.x, CORE.y, r * 3.1, 0, TAU);
   ctx.fill();
+  // Animated magnetic corona, drawn as curved filaments around the star.
+  ctx.save(); ctx.translate(CORE.x, CORE.y); ctx.rotate(time * 0.075);
+  for (let i = 0; i < 12; i += 1) {
+    ctx.rotate(TAU / 12);
+    ctx.strokeStyle = `rgba(255, 190, 75, ${0.12 + (i % 3) * 0.035})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(r * 1.1, 0);
+    ctx.bezierCurveTo(r * 1.7, -25, r * 2.5, 25, r * (2.1 + Math.sin(time + i) * 0.25), 38); ctx.stroke();
+  }
+  ctx.restore();
   // The bite ring: shards must cross it to hurt the core.
   ctx.strokeStyle = 'rgba(255, 209, 102, 0.25)';
   ctx.lineWidth = 2;
@@ -189,6 +221,8 @@ function drawPlayerShip(ctx, player, time) {
     ctx.closePath();
     ctx.fill();
   }
+  ctx.shadowColor = PALETTE.player;
+  ctx.shadowBlur = 20;
   // Hull: a swept dart.
   ctx.fillStyle = PALETTE.player;
   ctx.beginPath();
@@ -268,6 +302,9 @@ function drawEnemy(ctx, enemy) {
 }
 
 function drawBullets(ctx, bullets) {
+  ctx.save();
+  ctx.shadowColor = PALETTE.bullet;
+  ctx.shadowBlur = 12;
   for (const b of bullets) {
     // A short motion trail, so a volley reads as bolts, not dots.
     ctx.strokeStyle = 'rgba(173, 232, 244, 0.5)';
@@ -290,6 +327,7 @@ function drawBullets(ctx, bullets) {
     ctx.arc(b.x, b.y, b.radius * 0.45, 0, TAU);
     ctx.fill();
   }
+  ctx.restore();
 }
 
 function drawPickups(ctx, pickups, time) {
@@ -322,6 +360,16 @@ function drawPickups(ctx, pickups, time) {
 }
 
 function drawParticles(ctx, particles) {
+  for (const f of particles.flashes) {
+    const t = f.life / f.maxLife;
+    const r = f.radius * (1.1 - t * 0.8);
+    const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, r);
+    g.addColorStop(0, '#ffffff'); g.addColorStop(0.18, f.color); g.addColorStop(1, 'transparent');
+    ctx.globalAlpha = t * 0.65; ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, TAU); ctx.fill();
+    ctx.strokeStyle = f.color; ctx.lineWidth = 2 * t;
+    ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, TAU); ctx.stroke();
+  }
   for (const p of particles.sparks) {
     ctx.globalAlpha = clamp(p.life / p.maxLife, 0, 1);
     ctx.fillStyle = p.color;
@@ -341,6 +389,9 @@ function drawHud(ctx, game) {
   // Score, top left.
   text(ctx, 'SCORE', 28, 26, 14, PALETTE.dimText, 700, 'left');
   text(ctx, String(game.score), 28, 52, 30, PALETTE.text, 800, 'left');
+  text(ctx, `×${game.combo} COMBO`, 185, 52, 20, game.combo > 1 ? PALETTE.starlight : PALETTE.dimText, 800, 'left');
+  ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(185, 71, 115, 3);
+  ctx.fillStyle = PALETTE.starlight; ctx.fillRect(185, 71, 115 * game.comboTimer / 2.5, 3);
   // Starlight under the score.
   ctx.fillStyle = PALETTE.starlight;
   ctx.save();
@@ -352,7 +403,12 @@ function drawHud(ctx, game) {
   // Wave, top centre.
   text(ctx, `WAVE ${game.waves.wave}`, VIEW.width / 2, 30, 22, PALETTE.text, 800);
   const remaining = game.waves.queue.length + game.enemies.length;
-  text(ctx, `${remaining} shards left`, VIEW.width / 2, 56, 15, PALETTE.dimText, 600);
+  text(ctx, `${remaining} hostiles remaining`, VIEW.width / 2, 56, 15, PALETTE.dimText, 600);
+  ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(CORE.x - 100, 75, 200, 4);
+  ctx.fillStyle = PALETTE.player;
+  ctx.fillRect(CORE.x - 100, 75, 200 * clamp(remaining / (game.waves.total || 1), 0, 1), 4);
+  text(ctx, game.novaUnlocked ? (game.novaReady ? 'Q  NOVA BOMB • READY' : 'Q  NOVA BOMB • RECHARGING NEXT WAVE') : 'Q  NOVA BOMB — UNLOCK VIA UPGRADE', 28, 691, 14, game.novaReady ? PALETTE.player : PALETTE.dimText, 700, 'left');
+  text(ctx, 'P / ESC  PAUSE     M  AUDIO', VIEW.width - 28, 691, 13, PALETTE.dimText, 500, 'right');
   // Core HP, top right.
   text(ctx, 'CORE', VIEW.width - 28, 26, 14, PALETTE.dimText, 700, 'right');
   const barW = 190;
@@ -424,7 +480,7 @@ function drawMenu(ctx, game) {
   const lines = [
     'WASD or arrow keys — fly    ·    Mouse — aim    ·    Hold click or Space — shoot',
     'Shards that reach the core damage it. Clear a wave to pick an upgrade.',
-    'P or Esc — pause    ·    M — mute',
+    'Q — Nova Bomb (upgrade)    ·    Chain kills for ×5 score    ·    P / Esc — pause    ·    M — mute',
   ];
   lines.forEach((line, i) => {
     text(ctx, line, VIEW.width / 2, 478 + i * 28, 17, PALETTE.text, 500);
@@ -598,7 +654,7 @@ export function drawFrame(ctx, game) {
   game.buttons.length = 0;
   ctx.save();
   if (game.shake > 0.2) {
-    ctx.translate((Math.random() - 0.5) * game.shake, (Math.random() - 0.5) * game.shake);
+    ctx.translate(Math.sin(game.time * 113) * game.shake * 0.5, Math.cos(game.time * 137) * game.shake * 0.5);
   }
   drawStarfield(ctx, game.stars, game.time);
   drawCore(ctx, game, game.time);
@@ -608,9 +664,10 @@ export function drawFrame(ctx, game) {
     drawBullets(ctx, game.bullets);
     if (game.screen !== SCREEN_OVER) drawPlayerShip(ctx, game.player, game.time);
     drawParticles(ctx, game.particles);
-    drawHud(ctx, game);
+
   }
   ctx.restore();
+  if (game.screen !== SCREEN_MENU) drawHud(ctx, game);
   if (game.screen === SCREEN_MENU) drawMenu(ctx, game);
   else if (game.screen === SCREEN_UPGRADE) drawUpgradeScreen(ctx, game);
   else if (game.screen === SCREEN_PAUSED) drawPauseScreen(ctx, game);

@@ -5,6 +5,10 @@
 import { CORE } from './config.js';
 
 export const UPGRADES = [
+  { id: 'bomb', name: 'Nova Bomb', desc: 'Q: clear enemies. Once per wave.', icon: 'nova',
+    apply(player, game) { game.novaUnlocked = true; game.novaReady = true; } },
+  { id: 'overdrive', name: 'Overdrive', desc: '+35% fire rate. −10% damage.', icon: 'bolt',
+    apply(player) { player.fireInterval /= 1.35; player.bulletDamage *= 0.9; } },
   {
     id: 'rapid',
     name: 'Rapid Cycler',

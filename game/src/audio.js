@@ -2,8 +2,11 @@
 // blips shaped by gain envelopes. No audio files, no network, nothing to load.
 // The context is created lazily on the first user gesture, as browsers require.
 
-export function createAudio() {
+import { makeRng } from './utils.js';
+
+export function createAudio(seed = 7) {
   const audio = {
+    rng: makeRng(seed),
     ctx: null,
     master: null,
     muted: false,
@@ -53,7 +56,7 @@ function noiseBurst(audio, { length, volume, lowpass }) {
   const size = Math.max(1, Math.floor(audio.ctx.sampleRate * length));
   const buffer = audio.ctx.createBuffer(1, size, audio.ctx.sampleRate);
   const data = buffer.getChannelData(0);
-  for (let i = 0; i < size; i += 1) data[i] = (Math.random() * 2 - 1) * (1 - i / size);
+  for (let i = 0; i < size; i += 1) data[i] = (audio.rng.next() * 2 - 1) * (1 - i / size);
   const source = audio.ctx.createBufferSource();
   source.buffer = buffer;
   const filter = audio.ctx.createBiquadFilter();

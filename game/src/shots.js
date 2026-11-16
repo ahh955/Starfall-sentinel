@@ -91,7 +91,7 @@ function frameScore(game) {
     if (d < 430) near += 1;
     if (enemy.x > 40 && enemy.x < VIEW.width - 40 && enemy.y > 40 && enemy.y < VIEW.height - 40) visible += 1;
   }
-  return near * 3 + visible + Math.min(game.bullets.length, 4);
+  return near * 3 + visible + Math.min(game.bullets.length, 4) + Math.min(game.particles.flashes.length, 2) * 3;
 }
 
 // A plain-data copy of everything the simulation can change (the canvas,
@@ -100,6 +100,8 @@ function snapshotSim(game) {
   const copy = (value) => JSON.parse(JSON.stringify(value));
   return {
     time: game.time,
+    combo: game.combo, comboTimer: game.comboTimer,
+    novaUnlocked: game.novaUnlocked, novaReady: game.novaReady,
     score: game.score,
     starlight: game.starlight,
     coreHp: game.coreHp,
@@ -117,6 +119,8 @@ function snapshotSim(game) {
 
 function restoreSim(game, snap) {
   game.time = snap.time;
+  game.combo = snap.combo; game.comboTimer = snap.comboTimer;
+  game.novaUnlocked = snap.novaUnlocked; game.novaReady = snap.novaReady;
   game.score = snap.score;
   game.starlight = snap.starlight;
   game.coreHp = snap.coreHp;
@@ -144,14 +148,16 @@ function clearFirstWave(game) {
 export function stageShot(name, game) {
   if (name === 'play') {
     startRun(game);
-    // Mid-wave-2 is the busy frame: wave 1 is cleared, the scoreboard has
-    // points on it, and the second wave's thirteen shards are pouring in.
+    // Clear the early waves before scanning for a busy combat frame.
     // The pose scans the wave in quarter-second slices and keeps the
     // best-scoring frame, so the action is centred, not at an edge.
     if (!clearFirstWave(game)) {
       runSteps(game, fightingPilot, 9, null);
       return;
     }
+    // Reach wave three through normal play to show the new stingers in action.
+    runSteps(game, fightingPilot, 150, (g) => g.screen === SCREEN_UPGRADE);
+    if (game.screen === SCREEN_UPGRADE) chooseUpgrade(game, 0);
     let best = null;
     let bestScore = -1;
     const slice = Math.floor(0.25 * STEPS_PER_SECOND);

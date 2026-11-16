@@ -2,8 +2,15 @@
 // on hits, a soft glow when starlight is collected. This file owns the data
 // and the spawning; render.js draws them.
 
-export function createParticles() {
+function random(particles) {
+  particles.seed = (Math.imul(particles.seed, 1664525) + 1013904223) >>> 0;
+  return particles.seed / 4294967296;
+}
+
+export function createParticles(seed = 7) {
   return {
+    seed,
+    flashes: [],
     sparks: [],
     floaters: [],
   };
@@ -11,16 +18,16 @@ export function createParticles() {
 
 export function addParticles(particles, x, y, { count, color, speed, life, size }) {
   for (let i = 0; i < count; i += 1) {
-    const angle = Math.random() * Math.PI * 2;
-    const v = speed * (0.3 + Math.random() * 0.7);
+    const angle = random(particles) * Math.PI * 2;
+    const v = speed * (0.3 + random(particles) * 0.7);
     particles.sparks.push({
       x,
       y,
       vx: Math.cos(angle) * v,
       vy: Math.sin(angle) * v,
-      life: life * (0.6 + Math.random() * 0.7),
+      life: life * (0.6 + random(particles) * 0.7),
       maxLife: life,
-      size: size * (0.6 + Math.random() * 0.8),
+      size: size * (0.6 + random(particles) * 0.8),
       color,
     });
   }
@@ -28,12 +35,14 @@ export function addParticles(particles, x, y, { count, color, speed, life, size 
 
 export function explosion(particles, x, y, color, big) {
   addParticles(particles, x, y, {
-    count: big ? 34 : 18,
+    count: big ? 54 : 30,
     color,
-    speed: big ? 260 : 190,
-    life: big ? 0.7 : 0.45,
+    speed: big ? 340 : 250,
+    life: big ? 0.9 : 0.65,
     size: big ? 4.5 : 3.5,
   });
+  particles.flashes.push({ x, y, life: 0.32, maxLife: 0.32, radius: big ? 95 : 65, color });
+  addParticles(particles, x, y, { count: 10, color: '#ffd166', speed: 210, life: 0.55, size: 3 });
   // A few white-hot embers at the heart of the blast.
   addParticles(particles, x, y, { count: 6, color: '#ffffff', speed: 120, life: 0.3, size: 2.5 });
 }
@@ -56,6 +65,7 @@ export function addFloater(particles, x, y, text, color) {
 }
 
 export function updateParticles(particles, dt) {
+  particles.flashes = particles.flashes.filter(f => (f.life -= dt) > 0);
   const sparks = particles.sparks;
   for (let i = sparks.length - 1; i >= 0; i -= 1) {
     const p = sparks[i];
@@ -79,6 +89,7 @@ export function updateParticles(particles, dt) {
 }
 
 export function clearParticles(particles) {
+  particles.flashes.length = 0;
   particles.sparks.length = 0;
   particles.floaters.length = 0;
 }

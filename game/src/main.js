@@ -65,7 +65,7 @@ export function createGame(canvas, seed) {
     rng,
     stars: createStarfield(makeRng(seed ^ 0x9e3779b9), 170),
     input: createInput(canvas),
-    audio: createAudio(),
+    audio: createAudio(seed),
     screen: SCREEN_MENU,
     time: 0,
     score: 0,
@@ -76,7 +76,8 @@ export function createGame(canvas, seed) {
     enemies: [],
     bullets: [],
     pickups: [],
-    particles: createParticles(),
+    particles: createParticles(seed),
+    combo: 1, comboTimer: 0, novaUnlocked: false, novaReady: false,
     waves: createWaves(),
     upgradeChoices: [],
     buttons: [],
@@ -89,6 +90,8 @@ export function createGame(canvas, seed) {
 }
 
 export function startRun(game) {
+  game.combo = 1; game.comboTimer = 0;
+  game.novaUnlocked = false; game.novaReady = false;
   game.score = 0;
   game.starlight = 0;
   game.coreHp = CORE.maxHp;
@@ -122,6 +125,7 @@ export function chooseUpgrade(game, index) {
   game.upgradeChoices = [];
   game.screen = SCREEN_PLAYING;
   startWave(game.waves, game.waves.wave + 1, game.rng);
+  game.novaReady = game.novaUnlocked;
   playWaveStart(game.audio);
 }
 
@@ -165,6 +169,7 @@ function handleKeys(game) {
     return;
   }
   if (game.screen === SCREEN_PLAYING) {
+    if (wasPressed(input, 'KeyQ')) activateNova(game);
     if (wasPressed(input, 'KeyP') || wasPressed(input, 'Escape')) game.screen = SCREEN_PAUSED;
     return;
   }
@@ -183,6 +188,30 @@ function handleKeys(game) {
   if (game.screen === SCREEN_OVER) {
     if (wasPressed(input, 'Enter') || wasPressed(input, 'KeyR')) startRun(game);
   }
+}
+
+function awardKill(game, enemy) {
+  game.combo = game.comboTimer > 0 ? Math.min(5, game.combo + 1) : 1;
+  game.comboTimer = 2.5;
+  const points = enemy.score * game.combo;
+  game.score += points;
+  game.destroyed += 1;
+  addFloater(game.particles, enemy.x, enemy.y, `+${points} ×${game.combo}`, PALETTE.starlight);
+}
+
+function activateNova(game) {
+  if (!game.novaUnlocked || !game.novaReady) return;
+  game.novaReady = false;
+  for (const enemy of game.enemies.slice()) {
+    if (enemy.x < -enemy.radius || enemy.x > VIEW.width + enemy.radius || enemy.y < -enemy.radius || enemy.y > VIEW.height + enemy.radius) continue;
+    awardKill(game, enemy);
+    explosion(game.particles, enemy.x, enemy.y, enemyColor(enemy.kind), true);
+    dropStarlight(game.pickups, game.rng, enemy.x, enemy.y);
+    removeEnemy(game.enemies, enemy);
+  }
+  game.particles.flashes.push({ x: CORE.x, y: CORE.y, life: 0.6, maxLife: 0.6, radius: 850, color: '#90e0ef' });
+  game.shake = 12;
+  playExplosion(game.audio, true);
 }
 
 function resolveBulletHits(game) {
@@ -206,9 +235,7 @@ function resolveBulletHits(game) {
     if (hit.hp <= 0) {
       const big = hit.radius >= 24;
       explosion(particles, hit.x, hit.y, enemyColor(hit.kind), big);
-      addFloater(particles, hit.x, hit.y, `+${hit.score}`, PALETTE.starlight);
-      game.score += hit.score;
-      game.destroyed += 1;
+      awardKill(game, hit);
       dropStarlight(game.pickups, game.rng, hit.x, hit.y);
       playExplosion(audio, big);
       killEnemy(enemies, hit, game.rng, game.waves.wave);
@@ -245,6 +272,7 @@ function resolvePlayerHits(game) {
 
 function resolveCoreHits(game, biters) {
   for (const enemy of biters) {
+    if (!game.enemies.includes(enemy)) continue;
     removeEnemy(game.enemies, enemy);
     game.coreHp -= enemy.damage;
     game.shake = Math.max(game.shake, 16);
@@ -264,6 +292,8 @@ export function stepGame(game, dt) {
   game.time += dt;
   if (game.shake > 0) game.shake = Math.max(0, game.shake - dt * 34);
   if (game.screen === SCREEN_PLAYING) {
+    game.comboTimer = Math.max(0, game.comboTimer - dt);
+    if (game.comboTimer === 0) game.combo = 1;
     updatePlayer(game.player, game.input, dt, game.bullets, game.audio);
     updateBullets(game.bullets, dt);
     const biters = updateEnemies(game.enemies, dt);
@@ -322,6 +352,10 @@ export function startLoop(game) {
 // then run the loop. A pose is staged synchronously at load so the frame is
 // already there when the screenshot is taken.
 function boot() {
+  const icon = document.createElement('link');
+  icon.rel = 'icon';
+  icon.href = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="#ffd166" d="M16 0 20 12 32 16 20 20 16 32 12 20 0 16 12 12Z"/></svg>');
+  document.head.append(icon);
   const canvas = document.getElementById('game');
   const params = new URLSearchParams(window.location.search);
   const shot = params.get('shot');
