@@ -9,6 +9,12 @@ export const UPGRADES = [
     apply(player, game) { game.novaUnlocked = true; game.novaReady = true; } },
   { id: 'overdrive', name: 'Overdrive', desc: '+35% fire rate. −10% damage.', icon: 'bolt',
     apply(player) { player.fireInterval /= 1.35; player.bulletDamage *= 0.9; } },
+  { id: 'fortress', name: 'Core Fortress', desc: '+25 max core HP, heal 25.', icon: 'shield',
+    apply(player, game) { game.coreMaxHp = (game.coreMaxHp || CORE.maxHp) + 25; game.coreHp = Math.min(game.coreMaxHp, game.coreHp + 25); } },
+  { id: 'longfuse', name: 'Long Fuse', desc: 'Combo window +60%.', icon: 'burst',
+    apply(player) { player.comboWindow *= 1.6; } },
+  { id: 'scavenger', name: 'Scavenger', desc: 'Shards drop +1 starlight.', icon: 'magnet',
+    apply(player) { player.dropBonus += 1; } },
   {
     id: 'rapid',
     name: 'Rapid Cycler',
@@ -70,7 +76,7 @@ export const UPGRADES = [
     desc: 'Restore 35 core HP.',
     icon: 'core',
     apply(player, game) {
-      game.coreHp = Math.min(CORE.maxHp, game.coreHp + 35);
+      game.coreHp = Math.min(game.coreMaxHp || CORE.maxHp, game.coreHp + 35);
     },
   },
   {
@@ -87,8 +93,9 @@ export const UPGRADES = [
 
 // Draw three distinct upgrades at random. The repair card only appears when
 // the core is actually hurt, so the choice is never a dead card.
-export function rollUpgrades(rng, coreHp) {
-  const pool = UPGRADES.filter((u) => u.id !== 'repair' || coreHp < CORE.maxHp);
+export function rollUpgrades(rng, coreHp, maxHp) {
+  const ceiling = maxHp || CORE.maxHp;
+  const pool = UPGRADES.filter((u) => u.id !== 'repair' || coreHp < ceiling);
   const picks = [];
   const copy = pool.slice();
   while (picks.length < 3 && copy.length > 0) {

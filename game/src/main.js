@@ -5,10 +5,12 @@
 // screenshot poser can drive the same simulation headlessly, step by step.
 
 import { CORE, PALETTE, STEP, VIEW } from './config.js';
+import { BOSS } from './config.js';
 import { makeRng } from './utils.js';
 import { createInput, endFrame, wasPressed } from './input.js';
 import {
   createAudio,
+  playBoss,
   playCoreHit,
   playExplosion,
   playGameOver,
@@ -21,7 +23,7 @@ import {
 import { createPlayer, playerHit, resetPlayer } from './player.js';
 import { updatePlayer } from './player.js';
 import { clearBullets, updateBullets } from './bullets.js';
-import { enemyColor, killEnemy, removeEnemy, updateEnemies } from './enemies.js';
+import { KIND_BOSS, enemyColor, killEnemy, removeEnemy, spawnBossMinions, updateEnemies } from './enemies.js';
 import { clearParticles, coreBurst, createParticles, explosion, addFloater, hitSparks, updateParticles } from './particles.js';
 import { clearPickups, dropStarlight, updatePickups } from './pickups.js';
 import { createWaves, startWave, updateWaves } from './waves.js';
@@ -71,6 +73,8 @@ export function createGame(canvas, seed) {
     score: 0,
     starlight: 0,
     coreHp: CORE.maxHp,
+    // The core's ceiling; the Core Fortress upgrade raises it.
+    coreMaxHp: CORE.maxHp,
     best: loadBest(),
     player: createPlayer(),
     enemies: [],
@@ -95,6 +99,7 @@ export function startRun(game) {
   game.score = 0;
   game.starlight = 0;
   game.coreHp = CORE.maxHp;
+  game.coreMaxHp = CORE.maxHp;
   game.destroyed = 0;
   game.enemies.length = 0;
   clearBullets(game.bullets);
@@ -192,11 +197,26 @@ function handleKeys(game) {
 
 function awardKill(game, enemy) {
   game.combo = game.comboTimer > 0 ? Math.min(5, game.combo + 1) : 1;
-  game.comboTimer = 2.5;
+  game.comboTimer = game.player.comboWindow || 2.5;
   const points = enemy.score * game.combo;
   game.score += points;
   game.destroyed += 1;
   addFloater(game.particles, enemy.x, enemy.y, `+${points} ×${game.combo}`, PALETTE.starlight);
+}
+
+// The Leviathan's death: a triple blast, a long shake and a shower of
+// starlight, on top of the normal kill award.
+function bossDown(game, enemy) {
+  explosion(game.particles, enemy.x, enemy.y, PALETTE.boss, true);
+  explosion(game.particles, enemy.x - 30, enemy.y + 20, '#ffd166', true);
+  explosion(game.particles, enemy.x + 30, enemy.y - 20, '#ffffff', false);
+  game.particles.flashes.push({ x: enemy.x, y: enemy.y, life: 0.8, maxLife: 0.8, radius: 320, color: PALETTE.boss });
+  game.shake = 20;
+  addFloater(game.particles, enemy.x, enemy.y - 70, 'LEVIATHAN DOWN', PALETTE.boss);
+  for (let i = 0; i < 5; i += 1) {
+    dropStarlight(game.pickups, game.rng, enemy.x, enemy.y, game.player.dropBonus);
+  }
+  playExplosion(game.audio, true);
 }
 
 function activateNova(game) {
@@ -204,9 +224,21 @@ function activateNova(game) {
   game.novaReady = false;
   for (const enemy of game.enemies.slice()) {
     if (enemy.x < -enemy.radius || enemy.x > VIEW.width + enemy.radius || enemy.y < -enemy.radius || enemy.y > VIEW.height + enemy.radius) continue;
+    // The Leviathan is too big to vaporise: the nova wounds it instead.
+    if (enemy.kind === KIND_BOSS) {
+      enemy.hp -= BOSS.novaDamage;
+      enemy.flash = 0.15;
+      explosion(game.particles, enemy.x, enemy.y, PALETTE.boss, true);
+      if (enemy.hp <= 0) {
+        awardKill(game, enemy);
+        bossDown(game, enemy);
+        removeEnemy(game.enemies, enemy);
+      }
+      continue;
+    }
     awardKill(game, enemy);
     explosion(game.particles, enemy.x, enemy.y, enemyColor(enemy.kind), true);
-    dropStarlight(game.pickups, game.rng, enemy.x, enemy.y);
+    dropStarlight(game.pickups, game.rng, enemy.x, enemy.y, game.player.dropBonus);
     removeEnemy(game.enemies, enemy);
   }
   game.particles.flashes.push({ x: CORE.x, y: CORE.y, life: 0.6, maxLife: 0.6, radius: 850, color: '#90e0ef' });
@@ -236,8 +268,9 @@ function resolveBulletHits(game) {
       const big = hit.radius >= 24;
       explosion(particles, hit.x, hit.y, enemyColor(hit.kind), big);
       awardKill(game, hit);
-      dropStarlight(game.pickups, game.rng, hit.x, hit.y);
+      dropStarlight(game.pickups, game.rng, hit.x, hit.y, game.player.dropBonus);
       playExplosion(audio, big);
+      if (hit.kind === KIND_BOSS) bossDown(game, hit);
       killEnemy(enemies, hit, game.rng, game.waves.wave);
     } else {
       hitSparks(particles, bullet.x, bullet.y, PALETTE.bullet);
@@ -265,7 +298,8 @@ function resolvePlayerHits(game) {
     );
     game.shake = Math.max(game.shake, 8);
     playExplosion(audio, false);
-    removeEnemy(enemies, enemy);
+    // The Leviathan is not destroyed by ramming the ship; it ploughs on.
+    if (enemy.kind !== KIND_BOSS) removeEnemy(enemies, enemy);
     break;
   }
 }
@@ -277,6 +311,8 @@ function resolveCoreHits(game, biters) {
     game.coreHp -= enemy.damage;
     game.shake = Math.max(game.shake, 16);
     coreBurst(game.particles, enemy.x, enemy.y);
+    // A red flash rings the core so the damage reads at a glance.
+    game.particles.flashes.push({ x: CORE.x, y: CORE.y, life: 0.4, maxLife: 0.4, radius: 230, color: PALETTE.danger });
     addFloater(game.particles, CORE.x, CORE.y - CORE.radius - 24, `-${enemy.damage}`, PALETTE.danger);
     playCoreHit(game.audio);
   }
@@ -284,6 +320,22 @@ function resolveCoreHits(game, biters) {
     game.coreHp = 0;
     coreBurst(game.particles, CORE.x, CORE.y);
     endRun(game);
+  }
+}
+
+// Boss upkeep: every Leviathan sheds minis on a timer, capped so the arena
+// never floods. The timer lives on the boss object, so the screenshot
+// snapshot/restore already carries it.
+function updateBosses(game) {
+  for (const enemy of game.enemies) {
+    if (enemy.kind !== KIND_BOSS) continue;
+    enemy.spawnTimer = (enemy.spawnTimer ?? BOSS.spawnGap) - STEP;
+    if (enemy.spawnTimer <= 0) {
+      enemy.spawnTimer = BOSS.spawnGap;
+      if (game.enemies.length < 24) {
+        spawnBossMinions(game.enemies, game.rng, enemy, game.waves.wave);
+      }
+    }
   }
 }
 
@@ -297,6 +349,7 @@ export function stepGame(game, dt) {
     updatePlayer(game.player, game.input, dt, game.bullets, game.audio);
     updateBullets(game.bullets, dt);
     const biters = updateEnemies(game.enemies, dt);
+    updateBosses(game);
     resolveBulletHits(game);
     resolvePlayerHits(game);
     if (biters.length > 0) resolveCoreHits(game, biters);
@@ -308,9 +361,11 @@ export function stepGame(game, dt) {
     }
     updateParticles(game.particles, dt);
     if (game.screen === SCREEN_PLAYING) {
+      const bossSpawned = game.waves.bossSpawned;
       const state = updateWaves(game.waves, game.enemies, game.rng, dt);
+      if (!bossSpawned && game.waves.bossSpawned) playBoss(game.audio);
       if (state === 'cleared') {
-        game.upgradeChoices = rollUpgrades(game.rng, game.coreHp);
+        game.upgradeChoices = rollUpgrades(game.rng, game.coreHp, game.coreMaxHp);
         game.screen = SCREEN_UPGRADE;
         playWaveStart(game.audio);
       }

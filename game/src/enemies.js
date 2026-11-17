@@ -1,8 +1,9 @@
-// Void shards: the six enemy kinds, how they spawn at the arena's edge and
+// Void shards: the seven enemy kinds, how they spawn at the arena's edge and
 // how they spiral inward toward the star core. Each kind is a small object
-// with its own shape, speed and temperament.
+// with its own shape, speed and temperament. The seventh kind is the boss,
+// the Void Leviathan, which arrives on every boss wave.
 
-import { CORE, DART, MINI, PALETTE, SHARD, SPLITTER, TANK, VIEW, WAVES } from './config.js';
+import { BOSS, CORE, DART, MINI, PALETTE, SHARD, SPLITTER, TANK, VIEW, WAVES } from './config.js';
 import { angleBetween, pointOnCircle } from './utils.js';
 
 export const KIND_SHARD = 'shard';
@@ -11,9 +12,11 @@ export const KIND_TANK = 'tank';
 export const KIND_SPLITTER = 'splitter';
 export const KIND_STINGER = 'stinger';
 export const KIND_MINI = 'mini';
+export const KIND_BOSS = 'boss';
 
 // Each kind's neon colour, shared by the renderer and the explosion particles.
 const KIND_COLORS = {
+  [KIND_BOSS]: PALETTE.boss,
   [KIND_STINGER]: '#aaff40',
   [KIND_SHARD]: PALETTE.shard,
   [KIND_DART]: PALETTE.dart,
@@ -27,6 +30,7 @@ export function enemyColor(kind) {
 }
 
 const STATS = {
+  [KIND_BOSS]: BOSS,
   [KIND_STINGER]: { radius: 13, hp: 1, speed: 145, damage: 5, score: 95, spiral: 0 },
   [KIND_SHARD]: SHARD,
   [KIND_DART]: DART,
@@ -100,6 +104,50 @@ function shardVertices(rng, radius) {
   return points;
 }
 
+// Spawn the Void Leviathan at the arena's edge, like any other shard, then
+// arm its minion timer. Bosses never come from the normal spawn queue.
+export function spawnBoss(enemies, rng, wave) {
+  spawnEnemy(enemies, rng, KIND_BOSS, wave);
+  const boss = enemies[enemies.length - 1];
+  boss.spawnTimer = BOSS.spawnGap;
+  boss.spin = rng.range(-0.25, 0.25);
+  return boss;
+}
+
+// One mini shard at a position, as a splitter child or a boss minion.
+function makeMini(rng, x, y, wave) {
+  const stats = MINI;
+  return {
+    kind: KIND_MINI,
+    x,
+    y,
+    radius: stats.radius,
+    hp: stats.hp,
+    maxHp: stats.hp,
+    speed: stats.speed * (1 + (wave - 1) * WAVES.speedGrowth),
+    damage: stats.damage,
+    score: stats.score,
+    spiral: stats.spiral * (rng.next() < 0.5 ? 1 : -1),
+    vertices: shardVertices(rng, stats.radius),
+    spin: rng.range(-2.5, 2.5),
+    rotation: rng.range(0, Math.PI * 2),
+    flash: 0,
+  };
+}
+
+// The Leviathan sheds minis as it closes in, so the fight never goes quiet.
+export function spawnBossMinions(enemies, rng, boss, wave) {
+  for (let i = 0; i < BOSS.spawnCount; i += 1) {
+    const angle = rng.next() * Math.PI * 2;
+    enemies.push(makeMini(
+      rng,
+      boss.x + Math.cos(angle) * (boss.radius + 10),
+      boss.y + Math.sin(angle) * (boss.radius + 10),
+      wave,
+    ));
+  }
+}
+
 // Steer every enemy a step toward the core, with a sideways drift that turns
 // the approach into a spiral. Returns the enemies that reached the core.
 export function updateEnemies(enemies, dt) {
@@ -128,24 +176,13 @@ export function killEnemy(enemies, enemy, rng, wave) {
   if (index !== -1) enemies.splice(index, 1);
   if (enemy.kind === KIND_SPLITTER) {
     for (let i = 0; i < SPLITTER.children; i += 1) {
-      const stats = MINI;
       const angle = rng.next() * Math.PI * 2;
-      enemies.push({
-        kind: KIND_MINI,
-        x: enemy.x + Math.cos(angle) * 14,
-        y: enemy.y + Math.sin(angle) * 14,
-        radius: stats.radius,
-        hp: stats.hp,
-        maxHp: stats.hp,
-        speed: stats.speed * (1 + (wave - 1) * WAVES.speedGrowth),
-        damage: stats.damage,
-        score: stats.score,
-        spiral: stats.spiral * (rng.next() < 0.5 ? 1 : -1),
-        vertices: shardVertices(rng, stats.radius),
-        spin: rng.range(-2.5, 2.5),
-        rotation: rng.range(0, Math.PI * 2),
-        flash: 0,
-      });
+      enemies.push(makeMini(
+        rng,
+        enemy.x + Math.cos(angle) * 14,
+        enemy.y + Math.sin(angle) * 14,
+        wave,
+      ));
     }
   }
 }

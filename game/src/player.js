@@ -24,8 +24,15 @@ export function createPlayer() {
     fireCooldown: 0,
     invulnerable: 0,
     shieldRegen: 0,
+    // Seconds a kill chain stays alive; the Long Fuse upgrade lengthens it.
+    comboWindow: 2.5,
+    // Extra starlight per drop; the Scavenger upgrade raises it.
+    dropBonus: 0,
     // Engine flare animation phase, for the renderer.
     thrust: 0,
+    // Recent ship positions, newest last; the renderer draws them as a
+    // fading engine trail. Each point is { x, y, life }.
+    trail: [],
   };
 }
 
@@ -39,6 +46,16 @@ export function updatePlayer(player, input, dt, bullets, audio) {
   player.x = clamp(player.x + dir.x * player.speed * dt, player.radius, VIEW.width - player.radius);
   player.y = clamp(player.y + dir.y * player.speed * dt, player.radius, VIEW.height - player.radius);
   player.thrust = dir.x !== 0 || dir.y !== 0 ? 1 : Math.max(0, player.thrust - dt * 6);
+
+  // Leave a fading trail behind the ship while it moves.
+  if (player.thrust > 0.1) {
+    player.trail.push({ x: player.x, y: player.y, life: 0.35 });
+    if (player.trail.length > 24) player.trail.shift();
+  }
+  for (let i = player.trail.length - 1; i >= 0; i -= 1) {
+    player.trail[i].life -= dt;
+    if (player.trail[i].life <= 0) player.trail.splice(i, 1);
+  }
 
   // The ship always faces the mouse cursor.
   player.angle = angleBetween(player.x, player.y, input.mouseX, input.mouseY);

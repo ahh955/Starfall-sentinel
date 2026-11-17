@@ -81,17 +81,27 @@ function runSteps(game, pilot, maxSeconds, stopWhen) {
 }
 
 // How photogenic the current frame is: shards near the core count most,
-// on-screen shards and flying bolts add a little. The play pose keeps the
-// best-scoring frame of the wave, so the action is centred, not at an edge.
+// on-screen shards and flying bolts add a little, and a Leviathan well
+// inside the frame outweighs everything, so the play pose shows the boss
+// mid-fight — not just entering at an edge, half out of frame.
 function frameScore(game) {
   let near = 0;
   let visible = 0;
+  let bossScore = 0;
   for (const enemy of game.enemies) {
     const d = Math.hypot(enemy.x - CORE.x, enemy.y - CORE.y);
     if (d < 430) near += 1;
     if (enemy.x > 40 && enemy.x < VIEW.width - 40 && enemy.y > 40 && enemy.y < VIEW.height - 40) visible += 1;
+    if (enemy.kind === 'boss') {
+      // Fully inside the frame, clear of the HUD: the money shot.
+      const inside = enemy.x > 110 && enemy.x < VIEW.width - 110
+        && enemy.y > 150 && enemy.y < VIEW.height - 110;
+      bossScore += inside ? 80 : 15;
+      if (d < 430) bossScore += 25;
+    }
   }
-  return near * 3 + visible + Math.min(game.bullets.length, 4) + Math.min(game.particles.flashes.length, 2) * 3;
+  return near * 3 + visible + Math.min(game.bullets.length, 4) + Math.min(game.particles.flashes.length, 2) * 3
+    + bossScore;
 }
 
 // A plain-data copy of everything the simulation can change (the canvas,
@@ -105,6 +115,7 @@ function snapshotSim(game) {
     score: game.score,
     starlight: game.starlight,
     coreHp: game.coreHp,
+    coreMaxHp: game.coreMaxHp,
     destroyed: game.destroyed,
     shake: game.shake,
     screen: game.screen,
@@ -124,6 +135,7 @@ function restoreSim(game, snap) {
   game.score = snap.score;
   game.starlight = snap.starlight;
   game.coreHp = snap.coreHp;
+  game.coreMaxHp = snap.coreMaxHp;
   game.destroyed = snap.destroyed;
   game.shake = snap.shake;
   game.screen = snap.screen;
@@ -158,21 +170,30 @@ export function stageShot(name, game) {
     // Reach wave three through normal play to show the new stingers in action.
     runSteps(game, fightingPilot, 150, (g) => g.screen === SCREEN_UPGRADE);
     if (game.screen === SCREEN_UPGRADE) chooseUpgrade(game, 0);
+    // Scan forward from wave 3, keeping the best frame across every wave the
+    // autopilot reaches — a Leviathan frame wins outright, so the pose shows
+    // the boss when the run gets to wave 5; if the run ends first, the best
+    // wave-3/4 frame still stands.
     let best = null;
     let bestScore = -1;
     const slice = Math.floor(0.25 * STEPS_PER_SECOND);
-    for (let i = 0; i < 60; i += 1) {
+    for (let i = 0; i < 320; i += 1) {
       for (let s = 0; s < slice; s += 1) {
         if (game.screen === SCREEN_PLAYING) fightingPilot(game, game.time);
         else if (game.screen === SCREEN_UPGRADE) chooseUpgrade(game, 0);
         stepGame(game, STEP);
+        if (game.screen === SCREEN_OVER) break;
       }
-      if (game.screen !== SCREEN_PLAYING) break;
+      if (game.screen === SCREEN_OVER) break;
+      if (game.screen !== SCREEN_PLAYING) continue;
       const score = frameScore(game);
       if (score > bestScore) {
         bestScore = score;
         best = snapshotSim(game);
       }
+      // Once the boss is dead and wave 5 is cleared, later waves add nothing
+      // the pose needs; stop scanning and keep the best frame found.
+      if (game.waves.wave >= 6) break;
     }
     if (best) restoreSim(game, best);
     return;
@@ -183,7 +204,7 @@ export function stageShot(name, game) {
     if (game.screen !== SCREEN_UPGRADE) {
       // Insurance: build the upgrade screen from the run's real state.
       game.enemies.length = 0;
-      game.upgradeChoices = rollUpgrades(game.rng, game.coreHp);
+      game.upgradeChoices = rollUpgrades(game.rng, game.coreHp, game.coreMaxHp);
       game.screen = SCREEN_UPGRADE;
     }
     return;

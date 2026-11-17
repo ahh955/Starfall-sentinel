@@ -89,6 +89,22 @@ export const MINI = {
   spiral: 0.3,
 };
 
+// The Void Leviathan: the boss that arrives on every boss wave. Big, slow and
+// tough, it spawns minis as it closes in and is worth a fortune when it falls.
+export const BOSS = {
+  radius: 58,
+  hp: 70,
+  speed: 27,
+  damage: 25,
+  score: 500,
+  spiral: 0.12,
+  // Seconds between minion spawns, and how many it drops at a time.
+  spawnGap: 6,
+  spawnCount: 2,
+  // A Nova Bomb wounds it instead of killing it outright.
+  novaDamage: 40,
+};
+
 export const WAVES = {
   // Shards in wave 1, then this many more each wave.
   baseCount: 9,
@@ -104,6 +120,11 @@ export const WAVES = {
   leadIn: 1.2,
   // Seconds the "WAVE N" banner stays up.
   bannerTime: 2.2,
+  // Every Nth wave is a boss wave: the Void Leviathan arrives with a
+  // smaller escort instead of the full spawn queue.
+  bossEvery: 5,
+  // Boss waves keep this share of the normal spawn queue as an escort.
+  bossEscortShare: 0.6,
 };
 
 export const PICKUP = {
@@ -128,6 +149,7 @@ export const PALETTE = {
   tank: '#b5179e',
   splitter: '#7209b7',
   mini: '#ff5d8f',
+  boss: '#ff2e63',
   starlight: '#ffe066',
   text: '#eaf6ff',
   dimText: '#8fa8c8',

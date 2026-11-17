@@ -108,6 +108,13 @@ export function playWaveStart(audio) {
   tone(audio, { type: 'sine', from: 587, length: 0.16, volume: 0.2, start: 0.1 });
 }
 
+// The Leviathan's arrival: a low sawtooth roar under a deep boom.
+export function playBoss(audio) {
+  tone(audio, { type: 'sawtooth', from: 110, to: 55, length: 0.9, volume: 0.4 });
+  tone(audio, { type: 'sine', from: 90, to: 38, length: 1.1, volume: 0.5 });
+  noiseBurst(audio, { length: 0.7, volume: 0.3, lowpass: 320 });
+}
+
 export function playGameOver(audio) {
   tone(audio, { type: 'triangle', from: 392, to: 370, length: 0.3, volume: 0.3 });
   tone(audio, { type: 'triangle', from: 311, to: 294, length: 0.3, volume: 0.3, start: 0.28 });

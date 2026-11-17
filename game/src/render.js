@@ -3,7 +3,7 @@
 // never moves an entity, it only paints the frame and reports button rects.
 
 import { CORE, PALETTE, VIEW } from './config.js';
-import { enemyColor } from './enemies.js';
+import { KIND_BOSS, enemyColor } from './enemies.js';
 import { clamp, TAU } from './utils.js';
 
 export const SCREEN_MENU = 'menu';
@@ -111,7 +111,7 @@ function drawStarfield(ctx, stars, time) {
 }
 
 function drawCore(ctx, game, time) {
-  const hpFrac = clamp(game.coreHp / CORE.maxHp, 0, 1);
+  const hpFrac = clamp(game.coreHp / (game.coreMaxHp || CORE.maxHp), 0, 1);
   const pulse = 1 + Math.sin(time * 2.2) * 0.04;
   const r = CORE.radius * pulse;
   if (hpFrac <= 0) {
@@ -206,6 +206,16 @@ function drawCore(ctx, game, time) {
 }
 
 function drawPlayerShip(ctx, player, time) {
+  // The engine trail: fading cyan sparks along the ship's recent path.
+  for (const point of player.trail) {
+    const t = clamp(point.life / 0.35, 0, 1);
+    ctx.globalAlpha = t * 0.5;
+    ctx.fillStyle = PALETTE.playerGlow;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 2 + 5 * t, 0, TAU);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
   ctx.save();
   ctx.translate(player.x, player.y);
   ctx.rotate(player.angle);
@@ -255,13 +265,14 @@ function drawPlayerShip(ctx, player, time) {
   }
 }
 
-function drawEnemy(ctx, enemy) {
+function drawEnemy(ctx, enemy, time) {
   const color = enemyColor(enemy.kind);
+  const isBoss = enemy.kind === KIND_BOSS;
   ctx.save();
   ctx.translate(enemy.x, enemy.y);
   ctx.rotate(enemy.rotation);
   // Outer glow silhouette.
-  ctx.globalAlpha = 0.25;
+  ctx.globalAlpha = isBoss ? 0.35 : 0.25;
   ctx.fillStyle = color;
   ctx.beginPath();
   for (let i = 0; i < enemy.vertices.length; i += 1) {
@@ -283,7 +294,7 @@ function drawEnemy(ctx, enemy) {
   ctx.closePath();
   ctx.fill();
   ctx.strokeStyle = enemy.flash > 0 ? '#ffffff' : color;
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = isBoss ? 4 : 2.5;
   ctx.stroke();
   // Bright heart.
   ctx.fillStyle = color;
@@ -291,6 +302,38 @@ function drawEnemy(ctx, enemy) {
   ctx.arc(0, 0, enemy.radius * 0.28, 0, TAU);
   ctx.fill();
   ctx.restore();
+  if (isBoss) {
+    // The Leviathan's crown: a dashed ring turning against its spin, with
+    // three orbiting fragments, so it reads as a boss at a glance.
+    ctx.save();
+    ctx.translate(enemy.x, enemy.y);
+    ctx.rotate(-time * 0.5);
+    ctx.strokeStyle = 'rgba(255, 46, 99, 0.7)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([18, 12]);
+    ctx.beginPath();
+    ctx.arc(0, 0, enemy.radius + 16, 0, TAU);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+    for (let i = 0; i < 3; i += 1) {
+      const a = time * 0.9 + (i / 3) * TAU;
+      const fx = enemy.x + Math.cos(a) * (enemy.radius + 16);
+      const fy = enemy.y + Math.sin(a) * (enemy.radius + 16);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(fx, fy, 5, 0, TAU);
+      ctx.fill();
+    }
+    // Pulsing heart glow.
+    const pulse = 0.5 + 0.3 * Math.sin(time * 5);
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(enemy.x, enemy.y, enemy.radius * 0.14, 0, TAU);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
   // HP bar for tough enemies only, so the screen stays clean.
   if (enemy.maxHp >= 6 && enemy.hp < enemy.maxHp) {
     const w = enemy.radius * 1.8;
@@ -391,7 +434,7 @@ function drawHud(ctx, game) {
   text(ctx, String(game.score), 28, 52, 30, PALETTE.text, 800, 'left');
   text(ctx, `×${game.combo} COMBO`, 185, 52, 20, game.combo > 1 ? PALETTE.starlight : PALETTE.dimText, 800, 'left');
   ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(185, 71, 115, 3);
-  ctx.fillStyle = PALETTE.starlight; ctx.fillRect(185, 71, 115 * game.comboTimer / 2.5, 3);
+  ctx.fillStyle = PALETTE.starlight; ctx.fillRect(185, 71, 115 * game.comboTimer / (game.player.comboWindow || 2.5), 3);
   // Starlight under the score.
   ctx.fillStyle = PALETTE.starlight;
   ctx.save();
@@ -407,13 +450,27 @@ function drawHud(ctx, game) {
   ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(CORE.x - 100, 75, 200, 4);
   ctx.fillStyle = PALETTE.player;
   ctx.fillRect(CORE.x - 100, 75, 200 * clamp(remaining / (game.waves.total || 1), 0, 1), 4);
+  // Boss HP bar, under the wave progress, while the Leviathan lives.
+  const boss = game.enemies.find((e) => e.kind === KIND_BOSS);
+  if (boss) {
+    const bossBarW = 340;
+    const bossBarX = CORE.x - bossBarW / 2;
+    text(ctx, 'VOID LEVIATHAN', VIEW.width / 2, 102, 15, PALETTE.boss, 800);
+    ctx.fillStyle = 'rgba(255, 46, 99, 0.18)';
+    ctx.fillRect(bossBarX, 114, bossBarW, 10);
+    ctx.fillStyle = PALETTE.boss;
+    ctx.fillRect(bossBarX, 114, bossBarW * clamp(boss.hp / boss.maxHp, 0, 1), 10);
+    ctx.strokeStyle = 'rgba(255, 46, 99, 0.6)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bossBarX, 114, bossBarW, 10);
+  }
   text(ctx, game.novaUnlocked ? (game.novaReady ? 'Q  NOVA BOMB • READY' : 'Q  NOVA BOMB • RECHARGING NEXT WAVE') : 'Q  NOVA BOMB — UNLOCK VIA UPGRADE', 28, 691, 14, game.novaReady ? PALETTE.player : PALETTE.dimText, 700, 'left');
   text(ctx, 'P / ESC  PAUSE     M  AUDIO', VIEW.width - 28, 691, 13, PALETTE.dimText, 500, 'right');
   // Core HP, top right.
   text(ctx, 'CORE', VIEW.width - 28, 26, 14, PALETTE.dimText, 700, 'right');
   const barW = 190;
   const barX = VIEW.width - 28 - barW;
-  const hpFrac = clamp(game.coreHp / CORE.maxHp, 0, 1);
+  const hpFrac = clamp(game.coreHp / (game.coreMaxHp || CORE.maxHp), 0, 1);
   const hpColor = hpFrac > 0.5 ? PALETTE.heal : hpFrac > 0.25 ? PALETTE.core : PALETTE.danger;
   ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
   ctx.fillRect(barX, 38, barW, 14);
@@ -434,6 +491,16 @@ function drawHud(ctx, game) {
     const alpha = clamp(game.waves.banner / 0.6, 0, 1) * clamp((WAVES_BANNER_FADE - game.waves.banner) / 0.3 + 1, 0, 1);
     ctx.globalAlpha = clamp(alpha, 0, 1);
     glowText(ctx, `WAVE ${game.waves.wave}`, VIEW.width / 2, 150, 54, PALETTE.text);
+    if (game.waves.bossWave) {
+      text(ctx, 'THE VOID LEVIATHAN APPROACHES', VIEW.width / 2, 196, 20, PALETTE.boss, 800);
+    }
+    ctx.globalAlpha = 1;
+  }
+  // Boss banner: the Leviathan's arrival gets its own moment.
+  if (game.waves.bossBanner > 0) {
+    const alpha = clamp(game.waves.bossBanner / 0.6, 0, 1) * clamp((WAVES_BANNER_FADE - game.waves.bossBanner) / 0.3 + 1, 0, 1);
+    ctx.globalAlpha = clamp(alpha, 0, 1);
+    glowText(ctx, 'VOID LEVIATHAN', VIEW.width / 2, 150, 54, PALETTE.boss);
     ctx.globalAlpha = 1;
   }
   // Low core warning: a pulsing red frame.
@@ -480,7 +547,7 @@ function drawMenu(ctx, game) {
   const lines = [
     'WASD or arrow keys — fly    ·    Mouse — aim    ·    Hold click or Space — shoot',
     'Shards that reach the core damage it. Clear a wave to pick an upgrade.',
-    'Q — Nova Bomb (upgrade)    ·    Chain kills for ×5 score    ·    P / Esc — pause    ·    M — mute',
+    'Q — Nova Bomb (upgrade)    ·    Chain kills for ×5 score    ·    The Leviathan comes every 5th wave',
   ];
   lines.forEach((line, i) => {
     text(ctx, line, VIEW.width / 2, 478 + i * 28, 17, PALETTE.text, 500);
@@ -660,7 +727,7 @@ export function drawFrame(ctx, game) {
   drawCore(ctx, game, game.time);
   if (game.screen !== SCREEN_MENU) {
     drawPickups(ctx, game.pickups, game.time);
-    for (const enemy of game.enemies) drawEnemy(ctx, enemy);
+    for (const enemy of game.enemies) drawEnemy(ctx, enemy, game.time);
     drawBullets(ctx, game.bullets);
     if (game.screen !== SCREEN_OVER) drawPlayerShip(ctx, game.player, game.time);
     drawParticles(ctx, game.particles);

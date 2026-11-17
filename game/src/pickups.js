@@ -7,10 +7,14 @@ import { distance } from './utils.js';
 import { collectBurst } from './particles.js';
 import { playPickup } from './audio.js';
 
-export function dropStarlight(pickups, rng, x, y) {
+export function dropStarlight(pickups, rng, x, y, extra) {
   pickups.push(makeDrop(rng, x, y));
   if (rng.next() < PICKUP.bonusChance) {
     pickups.push(makeDrop(rng, x + rng.range(-18, 18), y + rng.range(-18, 18)));
+  }
+  // The Scavenger upgrade adds one guaranteed drop per kill per level.
+  for (let i = 0; i < (extra || 0); i += 1) {
+    pickups.push(makeDrop(rng, x + rng.range(-24, 24), y + rng.range(-24, 24)));
   }
 }
 
