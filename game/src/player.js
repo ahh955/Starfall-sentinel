@@ -18,6 +18,9 @@ export function createPlayer() {
     fireInterval: PLAYER.fireInterval,
     bulletDamage: PLAYER.bulletDamage,
     bulletCount: 1,
+    bulletSpeed: PLAYER.bulletSpeed,
+    // How many extra enemies each bolt passes through (Piercing Rounds).
+    pierce: 0,
     magnetRadius: PLAYER.magnetRadius,
     maxShield: PLAYER.maxShield,
     shield: PLAYER.maxShield,
@@ -88,9 +91,10 @@ function fireVolley(player, bullets) {
     spawnBullet(bullets, {
       x: player.x + Math.cos(angle) * nose,
       y: player.y + Math.sin(angle) * nose,
-      vx: Math.cos(angle) * PLAYER.bulletSpeed,
-      vy: Math.sin(angle) * PLAYER.bulletSpeed,
+      vx: Math.cos(angle) * player.bulletSpeed,
+      vy: Math.sin(angle) * player.bulletSpeed,
       damage: player.bulletDamage,
+      pierce: player.pierce,
     });
   }
 }

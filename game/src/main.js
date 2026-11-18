@@ -24,7 +24,7 @@ import { createPlayer, playerHit, resetPlayer } from './player.js';
 import { updatePlayer } from './player.js';
 import { clearBullets, updateBullets } from './bullets.js';
 import { KIND_BOSS, enemyColor, killEnemy, removeEnemy, spawnBossMinions, updateEnemies } from './enemies.js';
-import { clearParticles, coreBurst, createParticles, explosion, addFloater, hitSparks, updateParticles } from './particles.js';
+import { clearParticles, coreBurst, createParticles, celebrationBurst, explosion, addFloater, hitSparks, updateParticles } from './particles.js';
 import { clearPickups, dropStarlight, updatePickups } from './pickups.js';
 import { createWaves, startWave, updateWaves } from './waves.js';
 import { rollUpgrades } from './upgrades.js';
@@ -252,6 +252,8 @@ function resolveBulletHits(game) {
     const bullet = bullets[b];
     let hit = null;
     for (const enemy of enemies) {
+      // A piercing bolt never bites the same enemy twice.
+      if (bullet.hitIds.includes(enemy.id)) continue;
       const dx = enemy.x - bullet.x;
       const dy = enemy.y - bullet.y;
       const reach = enemy.radius + bullet.radius;
@@ -261,9 +263,13 @@ function resolveBulletHits(game) {
       }
     }
     if (!hit) continue;
-    bullets.splice(b, 1);
+    bullet.hitIds.push(hit.id);
     hit.hp -= bullet.damage;
     hit.flash = 0.09;
+    // A piercing bolt spends one pierce and keeps flying; any other bolt
+    // is spent on the hit.
+    if (bullet.pierce > 0) bullet.pierce -= 1;
+    else bullets.splice(b, 1);
     if (hit.hp <= 0) {
       const big = hit.radius >= 24;
       explosion(particles, hit.x, hit.y, enemyColor(hit.kind), big);
@@ -274,6 +280,7 @@ function resolveBulletHits(game) {
       killEnemy(enemies, hit, game.rng, game.waves.wave);
     } else {
       hitSparks(particles, bullet.x, bullet.y, PALETTE.bullet);
+      addFloater(particles, bullet.x, bullet.y - 12, `-${Math.round(bullet.damage)}`, '#ade8f4', 14);
       playHit(audio);
     }
   }
@@ -365,6 +372,12 @@ export function stepGame(game, dt) {
       const state = updateWaves(game.waves, game.enemies, game.rng, dt);
       if (!bossSpawned && game.waves.bossSpawned) playBoss(game.audio);
       if (state === 'cleared') {
+        // The wave-clear celebration: a score bonus that grows with the
+        // wave, a gold burst around the core, and the upgrade choice.
+        const bonus = 25 * game.waves.wave;
+        game.score += bonus;
+        addFloater(game.particles, CORE.x, CORE.y - CORE.radius - 60, `WAVE BONUS +${bonus}`, PALETTE.starlight);
+        celebrationBurst(game.particles, CORE.x, CORE.y);
         game.upgradeChoices = rollUpgrades(game.rng, game.coreHp, game.coreMaxHp);
         game.screen = SCREEN_UPGRADE;
         playWaveStart(game.audio);

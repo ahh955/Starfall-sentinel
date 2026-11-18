@@ -89,6 +89,20 @@ export const MINI = {
   spiral: 0.3,
 };
 
+// The Void Warden: a ringed elite that guards the void from wave 3 on.
+// Big, slow and very tough, it breaks into three darts when it finally falls.
+export const WARDEN = {
+  radius: 40,
+  hp: 22,
+  speed: 26,
+  damage: 15,
+  score: 250,
+  spiral: 0.2,
+  firstWave: 3,
+  // How many darts it breaks into when destroyed.
+  children: 3,
+};
+
 // The Void Leviathan: the boss that arrives on every boss wave. Big, slow and
 // tough, it spawns minis as it closes in and is worth a fortune when it falls.
 export const BOSS = {
@@ -149,6 +163,7 @@ export const PALETTE = {
   tank: '#b5179e',
   splitter: '#7209b7',
   mini: '#ff5d8f',
+  warden: '#a855f7',
   boss: '#ff2e63',
   starlight: '#ffe066',
   text: '#eaf6ff',

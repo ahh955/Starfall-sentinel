@@ -15,6 +15,10 @@ export const UPGRADES = [
     apply(player) { player.comboWindow *= 1.6; } },
   { id: 'scavenger', name: 'Scavenger', desc: 'Shards drop +1 starlight.', icon: 'magnet',
     apply(player) { player.dropBonus += 1; } },
+  { id: 'pierce', name: 'Piercing Rounds', desc: 'Bullets pass through +1 enemy.', icon: 'bolt',
+    apply(player) { player.pierce += 1; } },
+  { id: 'velocity', name: 'Velocity Rounds', desc: 'Bullets fly 30% faster.', icon: 'burst',
+    apply(player) { player.bulletSpeed *= 1.3; } },
   {
     id: 'rapid',
     name: 'Rapid Cycler',

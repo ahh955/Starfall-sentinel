@@ -3,7 +3,7 @@
 // never moves an entity, it only paints the frame and reports button rects.
 
 import { CORE, PALETTE, VIEW } from './config.js';
-import { KIND_BOSS, enemyColor } from './enemies.js';
+import { KIND_BOSS, KIND_WARDEN, enemyColor } from './enemies.js';
 import { clamp, TAU } from './utils.js';
 
 export const SCREEN_MENU = 'menu';
@@ -334,6 +334,25 @@ function drawEnemy(ctx, enemy, time) {
     ctx.fill();
     ctx.globalAlpha = 1;
   }
+  if (enemy.kind === KIND_WARDEN) {
+    // The Warden's ring: a dashed violet halo turning around the shard, with
+    // a white-hot heart, so the elite reads as one at a glance.
+    ctx.save();
+    ctx.translate(enemy.x, enemy.y);
+    ctx.rotate(time * 0.8);
+    ctx.strokeStyle = 'rgba(168, 85, 247, 0.85)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([14, 10]);
+    ctx.beginPath();
+    ctx.arc(0, 0, enemy.radius + 12, 0, TAU);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(enemy.x, enemy.y, enemy.radius * 0.16, 0, TAU);
+    ctx.fill();
+  }
   // HP bar for tough enemies only, so the screen stays clean.
   if (enemy.maxHp >= 6 && enemy.hp < enemy.maxHp) {
     const w = enemy.radius * 1.8;
@@ -423,7 +442,7 @@ function drawParticles(ctx, particles) {
   ctx.globalAlpha = 1;
   for (const f of particles.floaters) {
     ctx.globalAlpha = clamp(f.life / f.maxLife, 0, 1);
-    text(ctx, f.text, f.x, f.y, 18, f.color, 700);
+    text(ctx, f.text, f.x, f.y, f.size || 18, f.color, 700);
   }
   ctx.globalAlpha = 1;
 }

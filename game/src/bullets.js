@@ -4,7 +4,7 @@
 
 import { PLAYER, VIEW } from './config.js';
 
-export function spawnBullet(bullets, { x, y, vx, vy, damage }) {
+export function spawnBullet(bullets, { x, y, vx, vy, damage, pierce }) {
   bullets.push({
     x,
     y,
@@ -13,6 +13,10 @@ export function spawnBullet(bullets, { x, y, vx, vy, damage }) {
     damage,
     radius: PLAYER.bulletRadius,
     life: 1.6,
+    // How many more enemies this bolt can pass through (Piercing Rounds),
+    // and the ids of the enemies it already hit, so it never bites twice.
+    pierce: pierce || 0,
+    hitIds: [],
   });
 }
 

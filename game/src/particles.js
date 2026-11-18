@@ -60,8 +60,15 @@ export function coreBurst(particles, x, y) {
   addParticles(particles, x, y, { count: 10, color: '#ff4d6d', speed: 150, life: 0.5, size: 3 });
 }
 
-export function addFloater(particles, x, y, text, color) {
-  particles.floaters.push({ x, y, text, color: color || '#eaf6ff', life: 1.1, maxLife: 1.1 });
+export function addFloater(particles, x, y, text, color, size) {
+  particles.floaters.push({ x, y, text, color: color || '#eaf6ff', size: size || 18, life: 1.1, maxLife: 1.1 });
+}
+
+// The wave-clear celebration: a ring of gold sparks around the core.
+export function celebrationBurst(particles, x, y) {
+  addParticles(particles, x, y, { count: 42, color: '#ffd166', speed: 320, life: 0.9, size: 4 });
+  addParticles(particles, x, y, { count: 14, color: '#ffffff', speed: 200, life: 0.6, size: 3 });
+  particles.flashes.push({ x, y, life: 0.5, maxLife: 0.5, radius: 260, color: '#ffd166' });
 }
 
 export function updateParticles(particles, dt) {

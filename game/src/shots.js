@@ -83,11 +83,13 @@ function runSteps(game, pilot, maxSeconds, stopWhen) {
 // How photogenic the current frame is: shards near the core count most,
 // on-screen shards and flying bolts add a little, and a Leviathan well
 // inside the frame outweighs everything, so the play pose shows the boss
-// mid-fight — not just entering at an edge, half out of frame.
+// mid-fight — not just entering at an edge, half out of frame. A Void
+// Warden in frame counts too, so the elite shows up when the boss is absent.
 function frameScore(game) {
   let near = 0;
   let visible = 0;
   let bossScore = 0;
+  let wardenScore = 0;
   for (const enemy of game.enemies) {
     const d = Math.hypot(enemy.x - CORE.x, enemy.y - CORE.y);
     if (d < 430) near += 1;
@@ -99,9 +101,14 @@ function frameScore(game) {
       bossScore += inside ? 80 : 15;
       if (d < 430) bossScore += 25;
     }
+    if (enemy.kind === 'warden') {
+      const inside = enemy.x > 110 && enemy.x < VIEW.width - 110
+        && enemy.y > 150 && enemy.y < VIEW.height - 110;
+      wardenScore += inside ? 30 : 10;
+    }
   }
   return near * 3 + visible + Math.min(game.bullets.length, 4) + Math.min(game.particles.flashes.length, 2) * 3
-    + bossScore;
+    + bossScore + wardenScore;
 }
 
 // A plain-data copy of everything the simulation can change (the canvas,

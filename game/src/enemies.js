@@ -1,9 +1,9 @@
-// Void shards: the seven enemy kinds, how they spawn at the arena's edge and
+// Void shards: the eight enemy kinds, how they spawn at the arena's edge and
 // how they spiral inward toward the star core. Each kind is a small object
-// with its own shape, speed and temperament. The seventh kind is the boss,
+// with its own shape, speed and temperament. The eighth kind is the boss,
 // the Void Leviathan, which arrives on every boss wave.
 
-import { BOSS, CORE, DART, MINI, PALETTE, SHARD, SPLITTER, TANK, VIEW, WAVES } from './config.js';
+import { BOSS, CORE, DART, MINI, PALETTE, SHARD, SPLITTER, TANK, VIEW, WARDEN, WAVES } from './config.js';
 import { angleBetween, pointOnCircle } from './utils.js';
 
 export const KIND_SHARD = 'shard';
@@ -12,7 +12,13 @@ export const KIND_TANK = 'tank';
 export const KIND_SPLITTER = 'splitter';
 export const KIND_STINGER = 'stinger';
 export const KIND_MINI = 'mini';
+export const KIND_WARDEN = 'warden';
 export const KIND_BOSS = 'boss';
+
+// Every enemy gets a unique id at spawn, so a piercing bullet can remember
+// which ones it has already passed through. Ids never affect the simulation
+// itself: they only dedupe hits, so the counter needs no seeding.
+let nextEnemyId = 1;
 
 // Each kind's neon colour, shared by the renderer and the explosion particles.
 const KIND_COLORS = {
@@ -23,6 +29,7 @@ const KIND_COLORS = {
   [KIND_TANK]: PALETTE.tank,
   [KIND_SPLITTER]: PALETTE.splitter,
   [KIND_MINI]: PALETTE.mini,
+  [KIND_WARDEN]: PALETTE.warden,
 };
 
 export function enemyColor(kind) {
@@ -37,6 +44,7 @@ const STATS = {
   [KIND_TANK]: TANK,
   [KIND_SPLITTER]: SPLITTER,
   [KIND_MINI]: MINI,
+  [KIND_WARDEN]: WARDEN,
 };
 
 // Which kinds may appear in a wave, weighted so the basic shard stays common.
@@ -48,6 +56,7 @@ export function kindsForWave(wave) {
   if (wave >= DART.firstWave) pool.push({ kind: KIND_DART, weight: 4 });
   if (wave >= TANK.firstWave) pool.push({ kind: KIND_TANK, weight: 2 });
   if (wave >= SPLITTER.firstWave) pool.push({ kind: KIND_SPLITTER, weight: 3 });
+  if (wave >= WARDEN.firstWave) pool.push({ kind: KIND_WARDEN, weight: 2 });
   return pool;
 }
 
@@ -74,6 +83,7 @@ export function spawnEnemy(enemies, rng, kind, wave) {
   const hpScale = 1 + (wave - 1) * WAVES.hpGrowth;
   const speedScale = 1 + (wave - 1) * WAVES.speedGrowth;
   enemies.push({
+    id: nextEnemyId++,
     kind,
     x: pos.x,
     y: pos.y,
@@ -118,7 +128,30 @@ export function spawnBoss(enemies, rng, wave) {
 function makeMini(rng, x, y, wave) {
   const stats = MINI;
   return {
+    id: nextEnemyId++,
     kind: KIND_MINI,
+    x,
+    y,
+    radius: stats.radius,
+    hp: stats.hp,
+    maxHp: stats.hp,
+    speed: stats.speed * (1 + (wave - 1) * WAVES.speedGrowth),
+    damage: stats.damage,
+    score: stats.score,
+    spiral: stats.spiral * (rng.next() < 0.5 ? 1 : -1),
+    vertices: shardVertices(rng, stats.radius),
+    spin: rng.range(-2.5, 2.5),
+    rotation: rng.range(0, Math.PI * 2),
+    flash: 0,
+  };
+}
+
+// One dart at a position, as a Warden's parting gift when it breaks apart.
+function makeDart(rng, x, y, wave) {
+  const stats = DART;
+  return {
+    id: nextEnemyId++,
+    kind: KIND_DART,
     x,
     y,
     radius: stats.radius,
@@ -170,7 +203,8 @@ export function updateEnemies(enemies, dt) {
   return biters;
 }
 
-// Remove one enemy from the list. A splitter leaves its children behind.
+// Remove one enemy from the list. A splitter leaves its children behind;
+// a Warden breaks into three darts.
 export function killEnemy(enemies, enemy, rng, wave) {
   const index = enemies.indexOf(enemy);
   if (index !== -1) enemies.splice(index, 1);
@@ -181,6 +215,17 @@ export function killEnemy(enemies, enemy, rng, wave) {
         rng,
         enemy.x + Math.cos(angle) * 14,
         enemy.y + Math.sin(angle) * 14,
+        wave,
+      ));
+    }
+  }
+  if (enemy.kind === KIND_WARDEN) {
+    for (let i = 0; i < WARDEN.children; i += 1) {
+      const angle = rng.next() * Math.PI * 2;
+      enemies.push(makeDart(
+        rng,
+        enemy.x + Math.cos(angle) * 20,
+        enemy.y + Math.sin(angle) * 20,
         wave,
       ));
     }
